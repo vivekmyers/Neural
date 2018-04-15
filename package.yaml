@@ -1,10 +1,10 @@
 name:                Neural
 version:             0.1.0.0
-github:              "githubuser/Neural"
+github:              "vivekmyers/Neural"
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2018 Author name here"
+author:              "Vivek Myers" 
+maintainer:          "vivek.myers@gmail.com"
+copyright:           "Vivek Myers"
 
 extra-source-files:
 - README.md
@@ -21,6 +21,8 @@ description:         Please see the README on Github at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- random
+- transformers
 
 library:
   source-dirs: src
