@@ -1,6 +1,7 @@
 module Lib (
   Net (),
   net,
+  detNet,
   randNet,
   run,
   train
@@ -10,29 +11,34 @@ import System.Random
 import Control.Monad.Trans.State
 import Data.List
 
-data Net = Net {biases :: [[Double]], weights :: [[[Double]]]} deriving (Show, Eq, Ord, Read)
+data Net = Net {biases :: [[Double]], weights :: [[[Double]]], generator :: StdGen} deriving (Show, Read)
+
 type Input = [Double]
 type Output = [Double]
+
+detNet :: [Integer] -> Net
+detNet d =  net d $ mkStdGen 0
 
 randNet :: [Integer] -> IO Net
 randNet d = getStdGen >>= pure . net d
 
-net :: RandomGen r => [Integer] -> r -> Net
+net :: [Integer] -> StdGen -> Net
 net d | length d < 2 || any (<1) d = error "Invalid Dimensions"
       | otherwise = evalState $ do
           b <- sequence [sequence [rand | v <- [1..n]] | n <- tail d]
           w <- sequence [sequence [sequence [rand | j <- [1..y]] | v <- [1..x]] | (y, x) <- (zip <*> tail) d]
-          return $ Net {biases = b, weights = w}
+          r <- get
+          return $ Net {biases = b, weights = w, generator = r}
   where rand = state $ randomR (-1.0, 1.0)
 
 run :: Net -> Input -> Output
 run Net {biases = b, weights = w} input | length (head . head  $ w) /= length input = error "Invalid Input Size"
                                         | any ((||) <$> (>1.0) <*> (<0.0)) input = error "Invalid Input Values"
                                         | otherwise = foldl' ($$) input (zip w b)
-  where i $$ (w, b) = zipWith ((sig .) . (+)) (i ... w) b
+  where i $$ (w, b) = zipWith ((sig .) . (+)) (i .* w) b
 
-(...) :: [Double] -> [[Double]] -> [Double]
-i ... w = sum . zipWith (*) i <$> w
+(.*) :: [Double] -> [[Double]] -> [Double]
+i .* w = sum . zipWith (*) i <$> w
 
 train :: Double -> Int -> [Input] -> [Output] -> Net -> Net
 train r e i o n = iterate (gradient r i o) n !! e
@@ -58,14 +64,13 @@ prop i o Net {biases = b, weights = w} | length o /= length (last b) = error "In
 
 propb :: [Double] -> [[Double]] -> [[[Double]]] -> [[Double]] -> [[Double]] -> ([[Double]], [[[Double]]])
 propb cc ww a b c = foldr acc ([cc], [ww]) $ zip3 a b c
-  where acc (wx, zx, ax) (nbs, nws) = let sp = sigd <$> zx
-                                          dd = zipWith (*) sp (head nbs ... wx)
+  where acc (wx, zx, ax) (nbs, nws) = let dd = zipWith (*) (sigd <$> zx) (head nbs .* wx)
                                           nnw = [map (*v1) dd | v1 <- ax]
                                       in (dd:nbs, nnw:nws)
 
 propf :: [Double] -> [[Double]] -> [[[Double]]] -> ([[Double]], [[Double]])
 propf i b w = foldl f ([i], []) (zip b w)
-  where f (a, zs) (b', w') = let z = zipWith (+) (last a ... w') b'
+  where f (a, zs) (b', w') = let z = zipWith (+) (last a .* w') b'
                              in ((a ++ [map sig z]), zs ++ [z])
         
 sig :: Double -> Double
