@@ -6,9 +6,9 @@ import System.Random
 main :: IO ()
 main = do let t = dNet [2,5,5,5,1] <<+ train {
             input = [[0,1],[1,0],[0,0],[1,1]],
-            output = [[1],[1],[0],[1]],
-            epochs = 5000,
-            batch = 2,
+            output = [[1],[1],[0],[0]],
+            epochs = 50000,
+            batch = 1,
             rate = 4
           }
           putStrLn []

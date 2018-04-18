@@ -78,7 +78,7 @@ data TrainingData = TrainingData {
   } deriving (Show, Eq, Read)
 
 train :: TrainingData
-train = TrainingData 0.1 1 (2 ^ 16) True [] []
+train = TrainingData 0.125 8 (2 ^ 16) True [] []
 
 (<<+) :: Net -> TrainingData -> Net
 n <<+ TrainingData {
