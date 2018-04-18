@@ -14,7 +14,6 @@ module Neural (
 import System.Random
 import Control.Monad.Trans.State
 import Data.List
-import Control.Exception.Base
 
 data Net = Net {biases :: [[Double]], weights :: [[[Double]]], generator :: StdGen} deriving (Show, Read)
 
@@ -35,9 +34,6 @@ net d | length d < 2 || any (<1) d = error "Invalid Dimensions"
           r <- get
           return $ Net {biases = b, weights = w, generator = r}
   where rand = state $ randomR (-1.0, 1.0)
-
-cost :: Net -> Input -> Output -> Double
-cost n input result = sum $ (**2) <$> zipWith (-) (run n input) result
 
 run :: Net -> Input -> Output
 run Net {biases = b, weights = w} input | length (head . head  $ w) /= length input = error "Invalid Input Size"
@@ -103,8 +99,8 @@ prop i o Net {biases = b, weights = w} | length o /= length (last b) = error "In
         (nbsr, nwsr) = propb dc nw w (init zss) (init . init $ as)
 
 propb :: [Double] -> [[Double]] -> [[[Double]]] -> [[Double]] -> [[Double]] -> ([[Double]], [[[Double]]])
-propb cc ww a b c = foldr acc ([cc], [ww]) $ zip3 a b c
-  where acc (wx, zx, ax) (nbs, nws) = let dd = zipWith (*) (sigd <$> zx) (head nbs .* wx)
+propb cc ww a b c = foldr acc ([cc], [ww]) $ zipr3 a b c
+  where acc (wx, zx, ax) (nbs, nws) = let dd = zipWith (*) (sigd <$> zx) (head nbs .* transpose wx)
                                           nnw = [map (*v1) dd | v1 <- ax]
                                       in (dd:nbs, nnw:nws)
 
@@ -135,3 +131,6 @@ zipmat f (x:xs) (y:ys) = zipWith f x y : zipmat f xs ys
 zipmat3 :: (a -> b -> c) -> [[[a]]] -> [[[b]]] -> [[[c]]]
 zipmat3 _ [] [] = []
 zipmat3 f (x:xs) (y:ys) = zipmat f x y : zipmat3 f xs ys
+
+zipr3 a b c = r $ zip3 (r a) (r b) (r c)
+  where r = reverse
