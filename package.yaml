@@ -23,18 +23,20 @@ dependencies:
 - base >= 4.7 && < 5
 - random
 - transformers
+- bytestring
 
 library:
   source-dirs: src
 
 executables:
-  Neural-exe:
+  neural:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -O2
     dependencies:
     - Neural
 

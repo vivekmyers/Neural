@@ -11,7 +11,7 @@ module Neural (
   TrainingData (
       input,
       output,
-      epochs,
+      iterations,
       batch,
       rate,
       stochastic
@@ -23,6 +23,9 @@ module Neural (
 import System.Random
 import Control.Monad.Trans.State
 import Data.List
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C
+
 
 data Net = Net {
   biases :: [[Double]],
@@ -34,11 +37,11 @@ type Input = [Double]
 type Output = [Double]
 
 save :: FilePath -> Net -> IO ()
-save f n = writeFile f $ show n 
+save f n = B.writeFile f . C.pack $ show n 
 
 load :: FilePath -> IO Net
-load f = do n <- readFile f
-            return $ read n
+load f = do n <- B.readFile f
+            return . read $ C.unpack n
 
 dNet :: [Integer] -> Net
 dNet d =  net d $ mkStdGen 0
@@ -71,7 +74,7 @@ i .* w = sum . zipWith (*) i <$> w
 data TrainingData = TrainingData {
   rate :: Double,
   batch :: Int,
-  epochs :: Int,
+  iterations :: Int,
   stochastic :: Bool,
   input :: [Input],
   output :: [Output]
@@ -84,7 +87,7 @@ train = TrainingData 0.125 8 (2 ^ 16) True [] []
 n <<+ TrainingData {
   rate = r,
   batch = b,
-  epochs = e,
+  iterations = e,
   stochastic = s,
   input = i,
   output = o
