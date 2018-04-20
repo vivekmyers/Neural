@@ -30,7 +30,8 @@ main = do (arg:values) <- (++[[]]) <$> getArgs
                             input = pInput input 60000,
                             output = pOutput output 60000,
                             epochs = read $ head values,
-                            batch = 10
+                            batch = 10,
+                            rate = 0.5
                             }
                           putStrLn "Training Complete"
             "run"   -> do n <- load "DigitNetwork.nnhs"
