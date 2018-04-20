@@ -2,6 +2,7 @@ module Main where
 
 import Neural
 import System.IO
+import Control.Monad
 import System.Environment
 import Text.Printf
 import qualified Data.ByteString.Lazy as B
@@ -13,6 +14,13 @@ main = do (arg:values) <- (++[[]]) <$> getArgs
                           n <- rNet $ layers
                           save "DigitNetwork.nnhs" n
                           putStrLn "New Network Initialized"
+            "view"  -> do let imgs = read <$> init values
+                          input <- B.readFile "t10k-images.idx3-ubyte"
+                          n <- load "DigitNetwork.nnhs"
+                          forM_ imgs $ \img -> do
+                            putStrLn $ visual (getImage input img)
+                            putStr "Computed: "
+                            print $ disp (run n $ getX input img)
             "train" -> do n <- load "DigitNetwork.nnhs"
                           [input, output] <- mapM B.readFile [
                             "train-images.idx3-ubyte",
@@ -25,18 +33,23 @@ main = do (arg:values) <- (++[[]]) <$> getArgs
                             batch = 10
                             }
                           putStrLn "Training Complete"
-            "run" -> do n <- load "DigitNetwork.nnhs"
-                        [input, output] <- mapM B.readFile [
+            "run"   -> do n <- load "DigitNetwork.nnhs"
+                          [input, output] <- mapM B.readFile [
                             "t10k-images.idx3-ubyte",
                             "t10k-labels.idx1-ubyte"
                             ]
-                        let results = run n <$> pInput input 10000
-                            ar = disp <$> results
-                            ad = disp <$> pOutput output 10000
-                            count = length . filter (uncurry (==)) $ zip ar ad
-                        putStrLn . ("Accuracy: "++) . (++"%") $ printf "%.2f" (fromIntegral count / 100 :: Double)
+                          let results = run n <$> pInput input 10000
+                              ar = disp <$> results
+                              ad = disp <$> pOutput output 10000
+                              count = length . filter (uncurry (==)) $ zip ar ad
+                          putStrLn . ("Accuracy: "++) . (++"%") $ printf "%.2f" (fromIntegral count / 100 :: Double)
             _ -> putStrLn "Invalid Options"
             
+
+visual [] = []
+visual xs = map sh (take 28 xs) ++ "\n" ++ visual (drop 28 xs)
+  where sh x | x > 128 = '#'
+             | otherwise = ' '
 
 pInput i n = getX i <$> [0..n - 1]
 pOutput o n = getY o <$> [0..n - 1]
