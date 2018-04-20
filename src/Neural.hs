@@ -11,21 +11,19 @@ module Neural (
   TrainingData (
       input,
       output,
-      iterations,
+      epochs,
       batch,
-      rate,
-      stochastic
+      rate
       ),
   (<<+),
   train
   ) where
 
+import Data.List
 import System.Random
 import Control.Monad.Trans.State
-import Data.List
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C
-
 
 data Net = Net {
   biases :: [[Double]],
@@ -74,38 +72,40 @@ i .* w = sum . zipWith (*) i <$> w
 data TrainingData = TrainingData {
   rate :: Double,
   batch :: Int,
-  iterations :: Int,
-  stochastic :: Bool,
+  epochs :: Int,
   input :: [Input],
   output :: [Output]
   } deriving (Show, Eq, Read)
 
 train :: TrainingData
-train = TrainingData 0.125 8 (2 ^ 16) True [] []
+train = TrainingData 0.125 8 0 [] []
 
 (<<+) :: Net -> TrainingData -> Net
 n <<+ TrainingData {
   rate = r,
   batch = b,
-  iterations = e,
-  stochastic = s,
+  epochs = e,
   input = i,
   output = o
-  } | s = trainStoch r b e i o n
-    | otherwise = trainDet r e i o n
+  } | e == 0 = stochastic r b (max 1 $ (2 ^ 16) `div` length i) i o n
+    | e < 0 = error "Invalid Number of Epochs"
+    | b <= 0 = error "Invalid Batch Size"
+    | r <= 0 = error "Invalid Learning Rate"
+    | otherwise = stochastic r b e i o n
 
-trainStoch :: Double -> Int -> Int -> [Input] -> [Output] -> Net -> Net
-trainStoch r s e i o n = flip evalState (generator n) $ do
-                           v <- sequence $ take e $ repeat $ pick s $ zip i o
-                           return $ foldl' f n v
+stochastic :: Double -> Int -> Int -> [Input] -> [Output] -> Net -> Net
+stochastic r s e i o n = flip evalState (generator n) $ do
+                           v <- sequence $ replicate e $ batches s $ zip i o
+                           return $ foldl' f n $ concat v
   where f n l = let (a, b) = unzip l
                 in gradient r a b n
-        pick i d = sequence $ replicate i rand
-          where rand = do i <- state $ randomR (0, length d - 1)
-                          return $ d !! i
 
-trainDet :: Double -> Int -> [Input] -> [Output] -> Net -> Net
-trainDet r e i o n = iterate (gradient r i o) n !! e
+batches :: Int -> [(Input, Output)] -> State StdGen [[(Input, Output)]]
+batches s [] = return []
+batches s v = do r <- sequence . replicate s $ state (randomR (0.0, 1.0)) :: State StdGen [Double]
+                 let h = map snd . sort . zip r $ take s v
+                 hs <- batches s (drop s v)
+                 return $ h:hs
 
 gradient :: Double -> [Input] -> [Output] -> Net -> Net
 gradient e i o n | e <= 0 = error "Invalid Training Rate"

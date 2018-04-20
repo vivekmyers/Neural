@@ -21,7 +21,7 @@ main = do (arg:values) <- (++[[]]) <$> getArgs
                           save "DigitNetwork.nnhs" $ n <<+ train {
                             input = pInput input 60000,
                             output = pOutput output 60000,
-                            iterations = read $ head values,
+                            epochs = read $ head values,
                             batch = 10
                             }
                           putStrLn "Training Complete"
