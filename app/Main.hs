@@ -19,7 +19,10 @@ main = do (arg:values) <- (++[[]]) <$> getArgs
                           n <- load "DigitNetwork.nnhs"
                           forM_ imgs $ \img -> do
                             putStrLn $ visual (getImage input img)
+                            let computed = run n $ getX input img
                             putStr "Computed: "
+                            putStrLn $ "[" ++ unwords (printf "%.2f" <$> computed) ++ "]" 
+                            putStr "Result: "
                             print $ disp (run n $ getX input img)
             "train" -> do n <- load "DigitNetwork.nnhs"
                           [input, output] <- mapM B.readFile [
@@ -30,7 +33,8 @@ main = do (arg:values) <- (++[[]]) <$> getArgs
                             input = pInput input 60000,
                             output = pOutput output 60000,
                             epochs = read $ head values,
-                            batch = 10
+                            batch = 10,
+                            momentum = 0.5
                             }
                           putStrLn "Training Complete"
             "run"   -> do n <- load "DigitNetwork.nnhs"
