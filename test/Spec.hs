@@ -4,10 +4,12 @@ import Text.Printf
 import System.Random
 
 main :: IO ()
-main = do let t = dNet [2,5,5,5,1] <<+ train {
+main = do let t = dNet [2,5,5,1] <<+ train {
             input = [[0,1],[1,0],[0,0],[1,1]],
-            output = [[1],[1],[0],[0]],
-            rate = 10
+            output = [[1],[1],[1],[0]],
+            rate = 1,
+            epochs = 100000,
+            momentum = 0.5
           }
           putStrLn []
           let f = run t

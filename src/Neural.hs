@@ -13,7 +13,8 @@ module Neural (
       output,
       epochs,
       batch,
-      rate
+      rate,
+      momentum
       ),
   (<<+),
   train
@@ -63,14 +64,16 @@ run Net {
   weights = w
   } input | length (head . head  $ w) /= length input = error "Invalid Input Size"
           | any ((||) <$> (>1.0) <*> (<0.0)) input = error "Invalid Input Values"
-          | otherwise = foldl' f input (zip w b)
-  where f i (w, b) = zipWith ((sig .) . (+)) (i .* w) b
+          | otherwise = let l = zip w b
+                        in f act1 (foldl' (f act2) input (init l)) (last l)
+  where f g i (w, b) = zipWith ((g .) . (+)) (i .* w) b
 
 (.*) :: [Double] -> [[Double]] -> [Double]
 i .* w = sum . zipWith (*) i <$> w
 
 data TrainingData = TrainingData {
   rate :: Double,
+  momentum :: Double,
   batch :: Int,
   epochs :: Int,
   input :: [Input],
@@ -78,27 +81,29 @@ data TrainingData = TrainingData {
   } deriving (Show, Eq, Read)
 
 train :: TrainingData
-train = TrainingData 0.125 8 0 [] []
+train = TrainingData 0.125 0 8 0 [] []
 
 (<<+) :: Net -> TrainingData -> Net
 n <<+ TrainingData {
   rate = r,
+  momentum = m,
   batch = b,
   epochs = e,
   input = i,
   output = o
-  } | e == 0 = stochastic r b (max 1 $ (2 ^ 16) `div` length i) i o n
+  } | m < 0 || m >= 1 = error "Invalid Momentum"
     | e < 0 = error "Invalid Number of Epochs"
     | b <= 0 = error "Invalid Batch Size"
     | r <= 0 = error "Invalid Learning Rate"
-    | otherwise = stochastic r b e i o n
+    | e == 0 = stochastic m r b (max 1 $ (2 ^ 16) `div` (length i + 1)) i o n
+    | otherwise = stochastic m r b e i o n
 
-stochastic :: Double -> Int -> Int -> [Input] -> [Output] -> Net -> Net
-stochastic r s e i o n = flip evalState (generator n) $ do
-                           v <- sequence $ replicate e $ batches s $ zip i o
-                           return $ foldl' f n $ concat v
-  where f n l = let (a, b) = unzip l
-                in gradient r a b n
+stochastic :: Double -> Double -> Int -> Int -> [Input] -> [Output] -> Net -> Net
+stochastic m r s e i o n = flip evalState (generator n) $ do
+                             v <- sequence $ replicate e $ batches s $ zip i o
+                             return . snd . foldl' f (Nothing, n) $ concat v
+  where f (v, n) l = let (a, b) = unzip l
+                     in gradient v m r a b n
 
 batches :: Int -> [(Input, Output)] -> State StdGen [[(Input, Output)]]
 batches s [] = return []
@@ -107,13 +112,21 @@ batches s v = do r <- sequence . replicate s $ state (randomR (0.0, 1.0)) :: Sta
                  hs <- batches s (drop s v)
                  return $ h:hs
 
-gradient :: Double -> [Input] -> [Output] -> Net -> Net
-gradient e i o n | e <= 0 = error "Invalid Training Rate"
-                 | length i /= length o = error "Invalid Training Data"
-                 | Net {biases = b', weights = w'} <- n = n {
-                     biases = zipmat (-) b' b,
-                     weights = zipmat3 (-) w' w
-                     }
+gradient :: Maybe ([[Double]], [[[Double]]]) -> Double -> Double -> [Input] -> [Output] -> Net -> (Maybe ([[Double]], [[[Double]]]), Net)
+gradient v m e i o n | e <= 0 = error "Invalid Training Rate"
+                     | length i /= length o = error "Invalid Training Data"
+                     | v == Nothing, Net {biases = b', weights = w'} <- n =
+                         (,) (Just (mapmat negate b, mapmat3 negate w)) n {
+                           biases = zipmat (-) b' b,
+                           weights = zipmat3 (-) w' w
+                           }
+                     | Just (b'', w'') <- v, Net {biases = b', weights = w'} <- n =
+                         let vb = zipmat (+) (mapmat (*m) b'') (mapmat negate b)
+                             vw =  zipmat3 (+) (mapmat3 (*m) w'') (mapmat3 negate w)
+                         in (,) (Just (vb, vw)) n {
+                           biases = zipmat (+) vb b',
+                           weights = zipmat3 (+) vw w'
+                           }
   where (nws, nbs) = unzip [prop x y n | (x, y) <- zip i o]
         dn = e / fromIntegral (length i)
         b = mapmat (*dn) $ foldl1' (zipmat (+)) nbs
@@ -123,26 +136,34 @@ prop :: Input -> Output -> Net -> ([[[Double]]], [[Double]])
 prop i o Net {biases = b, weights = w} | length o /= length (last b) = error "Invalid Output Size"
                                        | otherwise = (nws, nbs)
   where as = propf i b w 
-        dc = zipWith (*) (zipWith (-) (last as) o) (map sigd (last as))
+        dc = zipWith (*) (zipWith (-) (last as) o) (map act1d (last as))
         nw = [map (*a) $ last $ init as | a <- dc]
         (nbs, nws) = propb dc nw w (init as) (init . init $ as)
 
 propb :: [Double] -> [[Double]] -> [[[Double]]] -> [[Double]] -> [[Double]] -> ([[Double]], [[[Double]]])
 propb nb nw ws zs as = foldr f ([nb], [nw]) $ zipr3 ws zs as
-  where f (w, z, a) (nbs, nws) = let nb = zipWith (*) (sigd <$> z) (head nbs .* transpose w)
+  where f (w, z, a) (nbs, nws) = let nb = zipWith (*) (act2d <$> z) (head nbs .* transpose w)
                                      nw = [map (*i) a | i <- nb]
                                  in (nb:nbs, nw:nws)
 
 propf :: [Double] -> [[Double]] -> [[[Double]]] -> [[Double]]
-propf i bs ws = reverse $ foldl f [i] (zip bs ws)
-  where f a (b, w) = let z = zipWith (+) (head a .* w) b
-                     in (map sig z : a)
+propf i bs ws = let l = (zip bs ws)
+                    r = foldl' (f act2) [i] (init l)
+                in reverse $ f act1 r (last l)
+  where f g a (b, w) = let z = zipWith (+) (head a .* w) b
+                       in (map g z : a)
         
-sig :: Double -> Double
-sig x = 1 / (1 + exp (-x))
+act1 :: Double -> Double
+act1 x = 1 / (1 + exp (-x))
 
-sigd :: Double -> Double
-sigd x = x * (1 - x)
+act1d :: Double -> Double
+act1d x = x * (1 - x)
+
+act2 :: Double -> Double
+act2 = tanh
+
+act2d :: Double -> Double
+act2d x = 1 - x ** 2
           
 mapmat :: (a -> b) -> [[a]] -> [[b]]
 mapmat _ [] = []
