@@ -1,2 +1,2 @@
 # haskell-backprop
-Haskell backpropagation demonstration
+Haskell backpropagation and SGD demonstration
